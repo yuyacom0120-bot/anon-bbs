@@ -1,14 +1,6 @@
-// pages/api/upload.ts
+// pages/api/upload.ts - Vercel Blob対応（改善版）
 import type { NextApiRequest, NextApiResponse } from 'next';
-import formidable from 'formidable';
-import fs from 'fs';
-import path from 'path';
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -16,47 +8,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).end('Method Not Allowed');
   }
 
-  const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-  
-  // アップロードディレクトリが存在しない場合は作成
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-  }
-
-  const form = formidable({
-    uploadDir,
-    keepExtensions: true,
-    maxFileSize: 5 * 1024 * 1024, // 5MB
-    filter: ({ mimetype }) => {
-      // jpeg, png, webpのみ許可
-      return mimetype?.includes('image/jpeg') || 
-             mimetype?.includes('image/png') || 
-             mimetype?.includes('image/webp') || false;
-    },
-  });
-
   try {
-    const [fields, files] = await form.parse(req);
-    const file = files.image?.[0];
+    const body = req.body as HandleUploadBody;
 
-    if (!file) {
-      return res.status(400).json({ message: '画像ファイルが見つかりません' });
-    }
+    const jsonResponse = await handleUpload({
+      body,
+      request: req,
+      onBeforeGenerateToken: async (pathname) => {
+        // ファイル名やサイズの検証をここで行う
+        return {
+          allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp'],
+          maximumSizeInBytes: 5 * 1024 * 1024, // 5MB
+        };
+      },
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        // アップロード完了後の処理（ログ記録など）
+        console.log('アップロード完了:', blob.url);
+      },
+    });
 
-    // ファイル名をタイムスタンプベースに変更
-    const ext = path.extname(file.originalFilename || '');
-    const newFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}${ext}`;
-    const newPath = path.join(uploadDir, newFileName);
-    
-    fs.renameSync(file.filepath, newPath);
-
-    // 公開URLを返す
-    const publicUrl = `/uploads/${newFileName}`;
-    
-    return res.status(200).json({ url: publicUrl });
-  } catch (error) {
+    return res.status(200).json(jsonResponse);
+  } catch (error: any) {
     console.error('アップロードエラー:', error);
-    return res.status(500).json({ message: 'アップロードに失敗しました' });
+    return res.status(error.status || 500).json({ 
+      message: error.message || 'アップロードに失敗しました'
+    });
   }
 }
 
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};

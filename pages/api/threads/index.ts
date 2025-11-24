@@ -1,24 +1,21 @@
 // pages/api/threads/index.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import db from '@/lib/db';
-import type { Thread, Category } from '@/lib/types';
+import { getThreads, createThread } from '@/lib/db';
+import type { Category } from '@/lib/types';
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
     const { category } = req.query;
     
-    let stmt;
-    let threads: Thread[];
-    
-    if (category && category !== 'all') {
-      stmt = db.prepare('SELECT * FROM threads WHERE category = ?');
-      threads = stmt.all(category as Category) as Thread[];
-    } else {
-      stmt = db.prepare('SELECT * FROM threads ORDER BY created_at DESC');
-      threads = stmt.all() as Thread[];
+    try {
+      const threads = await getThreads(
+        category && category !== 'all' ? (category as Category) : undefined
+      );
+      return res.status(200).json(threads);
+    } catch (error) {
+      console.error('スレッド取得エラー:', error);
+      return res.status(500).json({ message: 'サーバーエラーが発生しました' });
     }
-    
-    return res.status(200).json(threads);
   }
 
   if (req.method === 'POST') {
@@ -39,16 +36,18 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const safeAuthor = author && author.trim() !== '' ? author.trim() : '名無しさん';
 
-    const insert = db.prepare(
-      'INSERT INTO threads (title, author, category, image_path) VALUES (?, ?, ?, ?)'
-    );
-    const result = insert.run(title.trim(), safeAuthor, category, image_path || null);
+    try {
+      const thread = await createThread(title.trim(), safeAuthor, category, image_path);
+      
+      if (!thread) {
+        return res.status(500).json({ message: 'スレッド作成に失敗しました' });
+      }
 
-    const thread = db
-      .prepare('SELECT * FROM threads WHERE id = ?')
-      .get(result.lastInsertRowid) as Thread;
-
-    return res.status(201).json(thread);
+      return res.status(201).json(thread);
+    } catch (error) {
+      console.error('スレッド作成エラー:', error);
+      return res.status(500).json({ message: 'サーバーエラーが発生しました' });
+    }
   }
 
   res.setHeader('Allow', ['GET', 'POST']);

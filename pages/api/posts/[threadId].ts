@@ -1,9 +1,8 @@
 // pages/api/posts/[threadId].ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import db from '@/lib/db';
-import type { Post } from '@/lib/types';
+import { getPosts, createPost } from '@/lib/db';
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const threadId = Number(req.query.threadId);
   
   if (Number.isNaN(threadId)) {
@@ -11,11 +10,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   if (req.method === 'GET') {
-    const stmt = db.prepare(
-      'SELECT * FROM posts WHERE thread_id = ? ORDER BY created_at ASC'
-    );
-    const posts = stmt.all(threadId) as Post[];
-    return res.status(200).json(posts);
+    try {
+      const posts = await getPosts(threadId);
+      return res.status(200).json(posts);
+    } catch (error) {
+      console.error('投稿取得エラー:', error);
+      return res.status(500).json({ message: 'サーバーエラーが発生しました' });
+    }
   }
 
   if (req.method === 'POST') {
@@ -31,17 +32,20 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const safeAuthor = author && author.trim() !== '' ? author.trim() : '名無しさん';
 
-    const insert = db.prepare(
-      'INSERT INTO posts (thread_id, author, body, image_path) VALUES (?, ?, ?, ?)'
-    );
-    insert.run(threadId, safeAuthor, body.trim(), image_path || null);
+    try {
+      const post = await createPost(threadId, safeAuthor, body.trim(), image_path);
+      
+      if (!post) {
+        return res.status(500).json({ message: '投稿作成に失敗しました' });
+      }
 
-    const stmt = db.prepare(
-      'SELECT * FROM posts WHERE thread_id = ? ORDER BY created_at ASC'
-    );
-    const posts = stmt.all(threadId) as Post[];
-
-    return res.status(201).json(posts);
+      // 投稿後、全投稿を返す
+      const posts = await getPosts(threadId);
+      return res.status(201).json(posts);
+    } catch (error) {
+      console.error('投稿作成エラー:', error);
+      return res.status(500).json({ message: 'サーバーエラーが発生しました' });
+    }
   }
 
   res.setHeader('Allow', ['GET', 'POST']);

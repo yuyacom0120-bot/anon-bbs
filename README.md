@@ -10,6 +10,7 @@
 - ✅ **画像添付**: スレッド・レス両方で画像アップロード可能
 - ✅ **画像プレビュー**: 投稿前に画像をプレビュー表示
 - ✅ **アニメーション**: Framer Motionによるスムーズな動き
+- ✅ **Vercel対応**: Vercel Postgres + Vercel Blobで本番デプロイ可能
 
 ## 🚀 機能
 
@@ -26,6 +27,7 @@
 - ✅ カテゴリフィルタリング
 - ✅ レスポンシブデザイン
 - ✅ モダンなライトモードUI
+- ✅ クラウドデータベース対応
 
 ## 📦 技術スタック
 
@@ -34,8 +36,9 @@
 - **アニメーション**: Framer Motion
 - **アイコン**: Lucide React
 - **データ取得**: SWR
-- **データベース**: JSONファイル
-- **画像アップロード**: formidable
+- **データベース**: Vercel Postgres（PostgreSQL）
+- **ストレージ**: Vercel Blob
+- **デプロイ**: Vercel
 
 ## 🛠️ セットアップ手順
 
@@ -44,89 +47,121 @@
 - Node.js 18.x 以上
 - npm または yarn
 
-### 1. 依存パッケージのインストール
+### ローカル開発
 
-プロジェクトディレクトリで以下のコマンドを実行：
+#### 1. 依存パッケージのインストール
 
-\`\`\`bash
+```bash
 npm install
-\`\`\`
+```
 
-### 2. 開発サーバーの起動
+#### 2. 環境変数の設定（Vercel環境の場合）
 
-\`\`\`bash
+Vercel CLIを使用して環境変数を取得：
+
+```bash
+# Vercel CLIのインストール
+npm install -g vercel
+
+# Vercelにログイン
+vercel login
+
+# プロジェクトをリンク
+vercel link
+
+# 環境変数を取得
+vercel env pull .env.local
+```
+
+#### 3. データベースのセットアップ
+
+```bash
+npm run db:setup
+```
+
+#### 4. 開発サーバーの起動
+
+```bash
 npm run dev
-\`\`\`
+```
 
 ブラウザで [http://localhost:3000](http://localhost:3000) を開いてアクセスしてください。
 
+## 🚀 Vercelにデプロイ
+
+詳細な手順は [DEPLOY.md](./DEPLOY.md) を参照してください。
+
+### クイックスタート
+
+1. GitHubリポジトリを作成してプッシュ
+2. [Vercel](https://vercel.com) でプロジェクトをインポート
+3. Vercel Postgresを追加
+4. Vercel Blobを追加
+5. データベーステーブルを作成
+6. デプロイ完了！
+
 ## 📁 プロジェクト構造
 
-\`\`\`
+```
 .
 ├── components/
 │   ├── layout/
-│   │   └── MainLayout.tsx       # 共通レイアウト（ライトモード対応）
+│   │   └── MainLayout.tsx       # 共通レイアウト
 │   └── ui/                       # shadcn/ui コンポーネント
 │       ├── button.tsx
 │       ├── card.tsx
 │       ├── input.tsx
 │       ├── textarea.tsx
-│       └── select.tsx           # 新規: カテゴリ選択用
+│       └── select.tsx
 ├── lib/
-│   ├── db.ts                    # JSONベースDB（カテゴリ・画像対応）
-│   ├── types.ts                 # 型定義（Category型追加）
+│   ├── db.ts                    # Vercel Postgres接続
+│   ├── types.ts                 # TypeScript型定義
 │   └── utils.ts                 # ユーティリティ関数
 ├── pages/
 │   ├── api/
 │   │   ├── threads/
-│   │   │   └── index.ts         # スレッド一覧・作成API（カテゴリ対応）
+│   │   │   └── index.ts         # スレッドAPI
 │   │   ├── posts/
-│   │   │   └── [threadId].ts    # 投稿一覧・作成API（画像対応）
-│   │   └── upload.ts            # 新規: 画像アップロードAPI
+│   │   │   └── [threadId].ts    # 投稿API
+│   │   └── upload.ts            # 画像アップロードAPI
 │   ├── threads/
-│   │   └── [id].tsx             # スレッド詳細ページ（画像表示対応）
+│   │   └── [id].tsx             # スレッド詳細ページ
 │   ├── _app.tsx
 │   ├── _document.tsx
-│   └── index.tsx                # トップページ（カテゴリフィルタ追加）
-├── public/
-│   └── uploads/                 # 画像アップロード先（自動生成）
+│   └── index.tsx                # トップページ
+├── scripts/
+│   └── setup-db.js              # DB初期化スクリプト
 ├── styles/
-│   └── globals.css              # ライトモードスタイル
-├── db.json                      # JSONデータベース（自動生成）
-├── package.json
-├── tsconfig.json
-├── tailwind.config.js
+│   └── globals.css              # グローバルスタイル
+├── .env.example                 # 環境変数サンプル
+├── vercel.json                  # Vercel設定
+├── DEPLOY.md                    # デプロイ手順
 └── README.md
-\`\`\`
+```
 
 ## 🗄️ データベース構造
 
-JSONファイル（`db.json`）にデータが保存されます。
+### threadsテーブル
 
-### Threadオブジェクト
-\`\`\`typescript
-{
-  id: number;
-  title: string;
-  author: string;
-  category: '雑談' | 'ニュース' | 'プログラミング';
-  image_path?: string;  // 画像パス（任意）
-  created_at: string;
-}
-\`\`\`
+| カラム | 型 | 説明 |
+|--------|-----|------|
+| id | SERIAL | 主キー |
+| title | TEXT | スレッドタイトル |
+| author | TEXT | 作成者名 |
+| category | TEXT | カテゴリ（雑談/ニュース/プログラミング） |
+| image_path | TEXT | 画像URL（任意） |
+| created_at | TIMESTAMP | 作成日時 |
 
-### Postオブジェクト
-\`\`\`typescript
-{
-  id: number;
-  thread_id: number;
-  author: string;
-  body: string;
-  image_path?: string;  // 画像パス（任意）
-  created_at: string;
-}
-\`\`\`
+### postsテーブル
+
+| カラム | 型 | 説明 |
+|--------|-----|------|
+| id | SERIAL | 主キー |
+| thread_id | INTEGER | スレッドID（外部キー） |
+| author | TEXT | 投稿者名 |
+| body | TEXT | 本文 |
+| image_path | TEXT | 画像URL（任意） |
+| created_at | TIMESTAMP | 投稿日時 |
 
 ## 🎨 UIの特徴
 
@@ -175,37 +210,26 @@ JSONファイル（`db.json`）にデータが保存されます。
 
 ### 制限
 - 最大ファイルサイズ: 5MB
-- 保存先: `public/uploads/`
-- 自動リネーム: タイムスタンプベース
+- ストレージ: Vercel Blob（クラウド）
 
-## 🔧 カスタマイズ
+## 🔧 環境変数
 
-### カテゴリの変更
+```bash
+# Vercel Postgres（自動設定）
+POSTGRES_URL=
+POSTGRES_PRISMA_URL=
+POSTGRES_URL_NON_POOLING=
+POSTGRES_USER=
+POSTGRES_HOST=
+POSTGRES_PASSWORD=
+POSTGRES_DATABASE=
 
-`lib/types.ts`で定義されている`CATEGORIES`配列を編集：
+# Vercel Blob（自動設定）
+BLOB_READ_WRITE_TOKEN=
 
-\`\`\`typescript
-export const CATEGORIES: Category[] = ['雑談', 'ニュース', 'プログラミング'];
-\`\`\`
-
-### カラーテーマの変更
-
-`styles/globals.css`の`:root`変数を編集：
-
-\`\`\`css
-:root {
-  --primary: 221.2 83.2% 53.3%;  /* ブルー */
-  /* 他の色も変更可能 */
-}
-\`\`\`
-
-### 画像サイズ制限の変更
-
-`pages/api/upload.ts`の設定を編集：
-
-\`\`\`typescript
-maxFileSize: 5 * 1024 * 1024, // 5MB
-\`\`\`
+# アプリケーションURL
+NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
+```
 
 ## 🚀 今後の拡張予定
 
@@ -216,6 +240,7 @@ maxFileSize: 5 * 1024 * 1024, // 5MB
 - [ ] 通報機能
 - [ ] NGワードフィルタ
 - [ ] IP制限
+- [ ] リアルタイム更新
 
 ## 📝 ライセンス
 
@@ -228,4 +253,5 @@ maxFileSize: 5 * 1024 * 1024, // 5MB
 ---
 
 **作成日**: 2024年  
-**バージョン**: 2.0 - ライトモード・カテゴリ・画像対応版
+**バージョン**: 2.0 - Vercel対応版  
+**デプロイ**: [DEPLOY.md](./DEPLOY.md) を参照

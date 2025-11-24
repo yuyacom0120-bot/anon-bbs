@@ -1,114 +1,95 @@
-// lib/db.ts - JSONファイルベースのシンプルなデータベース
-import fs from 'fs';
-import path from 'path';
-import type { Thread, Post } from './types';
+// lib/db.ts - Vercel Postgres対応
+import { sql } from '@vercel/postgres';
+import type { Thread, Post, Category } from './types';
 
-const dbPath = path.join(process.cwd(), 'db.json');
-
-interface Database {
-  threads: Thread[];
-  posts: Post[];
+// スレッド一覧取得
+export async function getThreads(category?: Category): Promise<Thread[]> {
+  try {
+    let result;
+    if (category) {
+      result = await sql`
+        SELECT * FROM threads 
+        WHERE category = ${category}
+        ORDER BY created_at DESC
+      `;
+    } else {
+      result = await sql`
+        SELECT * FROM threads 
+        ORDER BY created_at DESC
+      `;
+    }
+    return result.rows as Thread[];
+  } catch (error) {
+    console.error('スレッド取得エラー:', error);
+    return [];
+  }
 }
 
-// データベースファイルが存在しない場合は作成
-if (!fs.existsSync(dbPath)) {
-  const initialData: Database = {
-    threads: [],
-    posts: [],
-  };
-  fs.writeFileSync(dbPath, JSON.stringify(initialData, null, 2));
+// スレッド取得（ID指定）
+export async function getThread(id: number): Promise<Thread | null> {
+  try {
+    const result = await sql`
+      SELECT * FROM threads 
+      WHERE id = ${id}
+    `;
+    return result.rows[0] as Thread || null;
+  } catch (error) {
+    console.error('スレッド取得エラー:', error);
+    return null;
+  }
 }
 
-// データベースを読み込む
-function readDB(): Database {
-  const data = fs.readFileSync(dbPath, 'utf-8');
-  return JSON.parse(data);
+// スレッド作成
+export async function createThread(
+  title: string,
+  author: string,
+  category: Category,
+  image_path?: string
+): Promise<Thread | null> {
+  try {
+    const result = await sql`
+      INSERT INTO threads (title, author, category, image_path, created_at)
+      VALUES (${title}, ${author}, ${category}, ${image_path || null}, NOW())
+      RETURNING *
+    `;
+    return result.rows[0] as Thread;
+  } catch (error) {
+    console.error('スレッド作成エラー:', error);
+    return null;
+  }
 }
 
-// データベースに書き込む
-function writeDB(data: Database): void {
-  fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+// 投稿一覧取得
+export async function getPosts(threadId: number): Promise<Post[]> {
+  try {
+    const result = await sql`
+      SELECT * FROM posts 
+      WHERE thread_id = ${threadId}
+      ORDER BY created_at ASC
+    `;
+    return result.rows as Post[];
+  } catch (error) {
+    console.error('投稿取得エラー:', error);
+    return [];
+  }
 }
 
-const db = {
-  prepare: (sql: string) => {
-    return {
-      all: (...params: any[]) => {
-        const data = readDB();
-        
-        if (sql.includes('SELECT * FROM threads')) {
-          let threads = [...data.threads];
-          
-          // カテゴリフィルタ
-          if (sql.includes('WHERE category')) {
-            const category = params[0];
-            threads = threads.filter(t => t.category === category);
-          }
-          
-          // 日時降順でソート
-          return threads.sort((a, b) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          );
-        }
-        
-        if (sql.includes('SELECT * FROM posts WHERE thread_id')) {
-          const threadId = params[0];
-          return data.posts
-            .filter(post => post.thread_id === threadId)
-            .sort((a, b) => 
-              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-            );
-        }
-        
-        return [];
-      },
-      get: (...params: any[]) => {
-        const data = readDB();
-        
-        if (sql.includes('SELECT * FROM threads WHERE id')) {
-          const id = params[0];
-          return data.threads.find(t => t.id === id);
-        }
-        
-        return null;
-      },
-      run: (...params: any[]) => {
-        const data = readDB();
-        
-        if (sql.includes('INSERT INTO threads')) {
-          const [title, author, category, image_path] = params;
-          const newThread: Thread = {
-            id: data.threads.length > 0 ? Math.max(...data.threads.map(t => t.id)) + 1 : 1,
-            title,
-            author,
-            category,
-            image_path: image_path || undefined,
-            created_at: new Date().toISOString(),
-          };
-          data.threads.push(newThread);
-          writeDB(data);
-          return { lastInsertRowid: newThread.id };
-        }
-        
-        if (sql.includes('INSERT INTO posts')) {
-          const [threadId, author, body, image_path] = params;
-          const newPost: Post = {
-            id: data.posts.length > 0 ? Math.max(...data.posts.map(p => p.id)) + 1 : 1,
-            thread_id: threadId,
-            author,
-            body,
-            image_path: image_path || undefined,
-            created_at: new Date().toISOString(),
-          };
-          data.posts.push(newPost);
-          writeDB(data);
-          return { lastInsertRowid: newPost.id };
-        }
-        
-        return { lastInsertRowid: 0 };
-      },
-    };
-  },
-};
-
-export default db;
+// 投稿作成
+export async function createPost(
+  threadId: number,
+  author: string,
+  body: string,
+  image_path?: string
+): Promise<Post | null> {
+  try {
+    const result = await sql`
+      INSERT INTO posts (thread_id, author, body, image_path, created_at)
+      VALUES (${threadId}, ${author}, ${body}, ${image_path || null}, NOW())
+      RETURNING *
+    `;
+    return result.rows[0] as Post;
+  } catch (error) {
+    console.error('投稿作成エラー:', error);
+    return null;
+  }
+}
